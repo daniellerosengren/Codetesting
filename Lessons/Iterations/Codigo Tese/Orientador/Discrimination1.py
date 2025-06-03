@@ -15,8 +15,8 @@ def Prob(w, g, delta_t, num_t, phi, b):
     P = np.square(np.sin(g * (sin_diff / (2 * w)) + (delta_t / 2) * b + np.pi / 4))
     return P
 
-def ProbEff(w, g, delta_t, num_t, phi, eta):
-    p = Prob(w, g, delta_t, num_t, phi)
+def ProbEff(w, g, delta_t, num_t, phi, b, eta):
+    p = Prob(w, g, delta_t, num_t, phi, b)
     q = eta * p + 0.7 * eta * (1 - p)
     return q
 
@@ -228,21 +228,21 @@ for df in range(freq_num):
         P_vec_w2 = ProbV(w2, g2, delta_t, num_t_vec, phi_vec)
         
         loss3 = 0
-        y_label =  Variable(torch.zeros(1).type(dtype))
-        y_pred_l =  Variable(torch.zeros(1).type(dtype))
+        y_label =  Variable(torch.zeros(1).float())
+        y_pred_l =  Variable(torch.zeros(1).float())
         for i in range(testdataset.len):
-            y_label.data[0] = testdataset[i][1]
-            y_pred_l.data[0] = 0
-            a = testdataset[i][0].clone().type(dtype)
+            y_label[0] = testdataset[i][1]
+            y_pred_l[0] = 0
+            a = testdataset[i][0].clone().float()
             a[a < 1] = 0
             m = MaxLike(a, P_vec_w1, P_vec_w2)
             if (m == 0):
-               y_pred_l.data[0] = 0
+               y_pred_l[0] = 0
             else:
-               y_pred_l.data[0] = 1            
+               y_pred_l[0] = 1            
             loss3 = loss3 + loss_fn(y_pred_l, y_label)
             
-        likeErr = loss3.data[0]/testdataset.len
+        likeErr = float(loss3)/testdataset.len
         print(" Likelihood error: %s" % (likeErr)) 
 
         
@@ -254,9 +254,9 @@ for df in range(freq_num):
         corrStart = 150
         cor_est1, cor_est2 = torch.zeros((1, corrOrd)), torch.zeros((1, corrOrd))
         for i in range(traindataset.maxw1index):
-            a=traindataset[i][0].clone().type(dtype)
+            a=traindataset[i][0].clone().float()
             a.resize_((1,D_in))
-            b=traindataset[traindataset.maxw1index+i][0].clone().type(dtype)
+            b=traindataset[traindataset.maxw1index+i][0].clone().float()
             b.resize_((1,D_in))
             for j in range(corrOrd):
                 ind = corrStart + j
@@ -275,32 +275,32 @@ for df in range(freq_num):
         cor_est2v = Variable(cor_est2)
         
         loss3 = 0
-        y_label =  Variable(torch.zeros(1).type(dtype))
-        y_pred_c =  Variable(torch.zeros(1).type(dtype))
+        y_label =  Variable(torch.zeros(1).float())
+        y_pred_c =  Variable(torch.zeros(1).float())
         for i in range(testdataset.len):
             if (i%10000 == 0):
                 print(" testing, test number %d" % (i))
-            y_label.data[0] = testdataset[i][1]
-            y_pred_c.data[0] = 0
-            a=testdataset[i][0].clone().type(dtype)
+            y_label[0] = testdataset[i][1]
+            y_pred_c[0] = 0
+            a=testdataset[i][0].clone().float()
             a.resize_((1,D_in))
             cor_testv = Variable(torch.zeros((1, corrOrd)))
             for j in range(corrOrd):
                 ind = corrStart + j
                 a1=a[0,0:D_in - (1+ind)]
                 a2=a[0,(1+ind):D_in]
-                cor_testv[0,j].data[0] = torch.mean((a1*a2 + 1)/2)
+                cor_testv[0,j] = torch.mean((a1*a2 + 1)/2)
         
-            y_pred_c.data[0] = 0
+            y_pred_c[0] = 0
             dis1 = torch.dist(cor_testv,cor_est1v)
             dis2 = torch.dist(cor_testv,cor_est2v)
-            if (dis2.data[0] > dis1.data[0]):
-                y_pred_c.data[0] = 0
+            if (dis2.item() > dis1.item()):
+                y_pred_c[0] = 0
             else:
-                y_pred_c.data[0] = 1
+                y_pred_c[0] = 1
             loss3 = loss3 + loss_fn(y_pred_c, y_label)
         
-        corrErr = loss3.data[0]/testdataset.len
+        corrErr = float(loss3)/testdataset.len
         print(" likelihood error : %f" % (corrErr))
         
             
@@ -315,4 +315,3 @@ error_lk2 = error_lk2/average_num
  
 plt.plot(freq_diff, error_ml, 'ro',  freq_diff,error_lk, 'gv', freq_diff, error_lk2, 'bs')
 plt.show()
-
