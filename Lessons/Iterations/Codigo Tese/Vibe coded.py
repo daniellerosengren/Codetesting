@@ -1,10 +1,10 @@
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
+from keras.models import Sequential
+from keras.layers import Dense
 import matplotlib.pyplot as plt
-
+import tensorflow as tf
 
 
 # --- CONFIGURATION ---
