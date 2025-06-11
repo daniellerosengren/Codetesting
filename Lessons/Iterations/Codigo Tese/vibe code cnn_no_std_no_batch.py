@@ -564,7 +564,7 @@ def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
         signal2 = probability_signal(t, Omega2, tau, delta2, phi2)
         
         # Mix the signals (simple addition)
-        mixed_signal = (signal1 + signal2)
+        mixed_signal = (signal1 + signal2) /2.0
         
         # Add Gaussian noise
         noise = np.random.normal(0, noise_level, size=mixed_signal.shape)
