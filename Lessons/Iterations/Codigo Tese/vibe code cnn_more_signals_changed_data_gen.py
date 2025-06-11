@@ -1,10 +1,10 @@
 """
-Step-by-Step CNN Implementation for Signal Processing
-====================================================
+CNN Implementation for Signal Processing with Multiple Signals
+=============================================================
 
 This code implements a 1D Convolutional Neural Network (CNN) from scratch to process
-time-series signals. The implementation includes data generation, normalization,
-and a complete CNN architecture with convolutional layers, pooling, and fully connected layers.
+time-series signals. It generates two signals with a frequency offset, saves the data
+to CSV files at different stages of processing, and visualizes the results.
 """
 
 import numpy as np
@@ -16,13 +16,12 @@ import os
 import time  # Import time module for timing measurements
 
 # --- CONFIGURATION ---
-n_samples = 2500      # Number of synthetic samples (will be 5000 after augmentation)
+n_samples = 500      # Number of synthetic samples (directly generating more samples instead of augmentation)
 n_timesteps = 20      # Length of time vector
 t = np.linspace(0, 1, n_timesteps)  # Time points from 0 to 1
 tau = 0.1             # Fixed interaction time parameter
 noise_level = 0.05    # Standard deviation of Gaussian noise
 np.random.seed(42)    # For reproducibility
-
 # --- NEURAL NETWORK FROM SCRATCH WITH SIMPLE CNN IMPLEMENTATION ---
 
 # Step 1: Define the Conv1D layer for 1D convolution operations
@@ -663,7 +662,7 @@ def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
         
         # Parameters for second signal (offset in frequency)
         Omega2 = Omega1  # Same amplitude
-        delta2 = delta1 + 0.05  # Offset frequency by 0.05
+        delta2 = delta1 + 0.5  # Offset frequency by 0.5
         phi2 = phi1  # Same phase
         
         # Generate clean signals
@@ -705,62 +704,24 @@ def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
 
     return np.array(X_all), np.array(y_all)
 
-# Step 8: Define data augmentation function
-
-def augment_data(X, y, augmentation_factor=2):
-    """
-    Augment the dataset by adding noise to existing samples
-    
-    Parameters:
-    - X: Original input data
-    - y: Original output data
-    - augmentation_factor: Factor by which to increase the dataset size
-    
-    Returns:
-    - Augmented X and y
-    """
-    n_samples = X.shape[0]
-    X_aug = []
-    y_aug = []
-    
-    for i in range(n_samples):
-        # Add original sample
-        X_aug.append(X[i])
-        y_aug.append(y[i])
-        
-        # Add augmented samples
-        for _ in range(augmentation_factor - 1):
-            # Add small random noise to the output signal
-            noise = np.random.normal(0, 0.02, size=y[i].shape)
-            X_aug.append(X[i])  # Time stays the same
-            y_aug.append(y[i] + noise)  # Add noise to the signal
-    
-    return np.array(X_aug), np.array(y_aug)
-
 # --- MAIN EXECUTION ---
 print("\n" + "="*50)
-print("CNN IMPLEMENTATION WITH DATA AUGMENTATION")
+print("CNN IMPLEMENTATION WITH DIRECT SIGNAL GENERATION")
 print("="*50 + "\n")
 
 # Initialize timing dictionary
 timing = {}
 
-# Step 9: Generate and prepare the dataset
+# Step 8: Generate and prepare the dataset
 print("Generating dataset...")
 start_time = time.time()
+# Generate samples directly without augmentation
 X, y = generate_dataset(n_samples)
 timing['data_generation'] = time.time() - start_time
+print(f"Dataset size: {X.shape[0]} samples")
 print(f"Data generation time: {timing['data_generation']:.2f} seconds")
 
-# Step 10: Augment the data
-print("Augmenting data...")
-start_time = time.time()
-X, y = augment_data(X, y, augmentation_factor=2)
-timing['data_augmentation'] = time.time() - start_time
-print(f"Dataset size after augmentation: {X.shape[0]} samples")
-print(f"Data augmentation time: {timing['data_augmentation']:.2f} seconds")
-
-# Step 11: Normalize the data and save preprocessed data
+# Step 9: Normalize the data and save preprocessed data
 print("Normalizing features...")
 start_time = time.time()
 # Normalize input features (time values)
@@ -790,7 +751,7 @@ preprocessed_path = 'output/preprocessed_data.csv'
 df_preprocessed.to_csv(preprocessed_path, index=False)
 print(f"Preprocessed data saved to {preprocessed_path}")
 
-# Step 12: Split the data into training, validation, and test sets
+# Step 10: Split the data into training, validation, and test sets
 print("Splitting data...")
 start_time = time.time()
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
@@ -798,7 +759,7 @@ X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.
 timing['data_splitting'] = time.time() - start_time
 print(f"Data splitting time: {timing['data_splitting']:.2f} seconds")
 
-# Step 13: Create and configure the CNN model
+# Step 11: Create and configure the CNN model
 print("Creating CNN neural network...")
 start_time = time.time()
 model = SimpleNN()
@@ -825,7 +786,7 @@ model.add(Dense(units=n_timesteps))           # Output size matches the number o
 timing['model_creation'] = time.time() - start_time
 print(f"Model creation time: {timing['model_creation']:.2f} seconds")
 
-# Step 14: Train the model
+# Step 12: Train the model
 print("Training model...")
 start_time = time.time()
 history = model.train(
@@ -840,7 +801,7 @@ history = model.train(
 timing['model_training'] = time.time() - start_time
 print(f"Model training time: {timing['model_training']:.2f} seconds")
 
-# Step 15: Evaluate the model and save CNN processed data
+# Step 13: Evaluate the model and save CNN processed data
 print("Evaluating model...")
 start_time = time.time()
 y_pred = model.predict(X_test)
@@ -877,7 +838,7 @@ cnn_processed_path = 'output/cnn_processed_data.csv'
 df_cnn_processed.to_csv(cnn_processed_path, index=False)
 print(f"CNN processed data saved to {cnn_processed_path}")
 
-# Step 16: Visualize the results
+# Step 14: Visualize the results
 plt.figure(figsize=(12, 8))
 
 # Plot training history
@@ -908,13 +869,37 @@ for i in range(3):
     plt.grid()
 
 plt.tight_layout()
+plt.savefig('output/cnn_results.png')
+print("Results visualization saved to output/cnn_results.png")
 plt.show()
 
-# Step 17: Print model summary
+# Step 15: Print model summary
 print("\nSummary of CNN Implementation:")
+print("1. Data Generation:")
+print("   - Generated two signals with 0.05 frequency offset")
+print("   - Mixed signals and added noise")
+print("   - Saved raw signals to CSV")
+print("2. Data Preprocessing:")
+print("   - Normalized data using StandardScaler")
+print("   - Saved preprocessed data to CSV")
+print("3. CNN Architecture:")
+print("   - First Conv1D: 16 filters, kernel size 3")
+print("   - Second Conv1D: 32 filters, kernel size 3")
+print("   - MaxPooling1D with pool size 2")
+print("   - Dense layer with 64 units")
+print("   - Output layer with 20 units")
+print("4. Regularization:")
+print("   - Batch Normalization")
+print("   - Dropout (20%)")
+print("   - L2 weight decay")
+print("5. Results:")
+print(f"   - Test MSE: {test_mse:.4f}")
+print(f"   - Test MAE: {test_mae:.4f}")
+print("   - Saved CNN processed data to CSV")
+print("\nAll data files are saved in the 'output' directory.")
+
 print("\nTiming Summary:")
 print(f"Data Generation:    {timing['data_generation']:.2f} seconds")
-print(f"Data Augmentation:  {timing['data_augmentation']:.2f} seconds")
 print(f"Normalization:      {timing['normalization']:.2f} seconds")
 print(f"Data Splitting:     {timing['data_splitting']:.2f} seconds")
 print(f"Model Creation:     {timing['model_creation']:.2f} seconds")

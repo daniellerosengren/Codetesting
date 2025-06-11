@@ -1,27 +1,27 @@
 """
-Step-by-Step CNN Implementation for Signal Processing
-====================================================
+CNN Implementation for Signal Processing with Multiple Signals (No Standardization, No Batch Normalization)
+=============================================================
 
 This code implements a 1D Convolutional Neural Network (CNN) from scratch to process
-time-series signals. The implementation includes data generation, normalization,
-and a complete CNN architecture with convolutional layers, pooling, and fully connected layers.
+time-series signals. It generates two signals with a frequency offset, saves the data
+to CSV files at different stages of processing, and visualizes the results.
+This version does not use standardization for data preprocessing or batch normalization in the neural network.
 """
 
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score, explained_variance_score
 import matplotlib.pyplot as plt
 import pandas as pd
 import os
 import time  # Import time module for timing measurements
-
+np.random.seed(42)    # For reproducibility
 # --- CONFIGURATION ---
-n_samples = 2500      # Number of synthetic samples (will be 5000 after augmentation)
+n_samples = 500      # Number of synthetic samples (directly generating more samples instead of augmentation)
 n_timesteps = 20      # Length of time vector
 t = np.linspace(0, 1, n_timesteps)  # Time points from 0 to 1
 tau = 0.1             # Fixed interaction time parameter
 noise_level = 0.05    # Standard deviation of Gaussian noise
-np.random.seed(42)    # For reproducibility
 
 # --- NEURAL NETWORK FROM SCRATCH WITH SIMPLE CNN IMPLEMENTATION ---
 
@@ -386,113 +386,6 @@ class Dropout:
         """Backward pass: Compute gradients"""
         return dY * self.mask
 
-# Batch Normalization Layer
-class BatchNormalization:
-    """
-    Batch Normalization Layer
-    
-    This layer normalizes the inputs to have zero mean and unit variance.
-    It helps in faster convergence and reduces the sensitivity to initialization.
-    """
-    def __init__(self, input_dim=None, epsilon=1e-8, momentum=0.9):
-        """
-        Initialize BatchNormalization
-        
-        Parameters:
-        - input_dim: Input dimension (optional)
-        - epsilon: Small constant for numerical stability
-        - momentum: Momentum for running statistics
-        """
-        self.input_dim = input_dim if input_dim is not None else 1
-        self.epsilon = epsilon
-        self.momentum = momentum
-        
-        # Initialize parameters
-        self.gamma = np.ones((1, self.input_dim))  # Scale parameter
-        self.beta = np.zeros((1, self.input_dim))  # Shift parameter
-        self.running_mean = np.zeros((1, self.input_dim))  # Running mean for inference
-        self.running_var = np.ones((1, self.input_dim))  # Running variance for inference
-        
-        # Initialize placeholders
-        self.X = np.zeros((1, self.input_dim))
-        self.X_norm = np.zeros((1, self.input_dim))
-        self.batch_mean = np.zeros((1, self.input_dim))
-        self.batch_var = np.ones((1, self.input_dim))
-        
-    def initialize(self, input_dim):
-        """Reinitialize parameters if input dimension changes"""
-        self.input_dim = input_dim
-        self.gamma = np.ones((1, input_dim))
-        self.beta = np.zeros((1, input_dim))
-        self.running_mean = np.zeros((1, input_dim))
-        self.running_var = np.ones((1, input_dim))
-        
-    def forward(self, X, training=True):
-        """
-        Forward pass: Apply batch normalization
-        
-        Parameters:
-        - X: Input data
-        - training: Whether in training mode
-        
-        Returns:
-        - Normalized output
-        """
-        # Update input_dim if necessary and reinitialize parameters
-        if X.shape[1] != self.input_dim:
-            self.initialize(X.shape[1])
-        
-        self.X = X
-        
-        if training:
-            # Calculate batch statistics
-            self.batch_mean = np.mean(X, axis=0, keepdims=True)
-            self.batch_var = np.var(X, axis=0, keepdims=True)
-            
-            # Update running statistics for inference
-            self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * self.batch_mean
-            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * self.batch_var
-            
-            # Normalize
-            self.X_norm = (X - self.batch_mean) / np.sqrt(self.batch_var + self.epsilon)
-            
-            # Scale and shift
-            return self.gamma * self.X_norm + self.beta
-        else:
-            # Use running statistics for inference
-            X_norm = (X - self.running_mean) / np.sqrt(self.running_var + self.epsilon)
-            return self.gamma * X_norm + self.beta
-    
-    def backward(self, dY, learning_rate):
-        """
-        Backward pass: Compute gradients and update parameters
-        
-        Parameters:
-        - dY: Gradient from next layer
-        - learning_rate: Learning rate for parameter updates
-        
-        Returns:
-        - Gradient with respect to input
-        """
-        # Get batch size
-        m = self.X.shape[0]
-        
-        # Compute gradients for gamma and beta
-        dgamma = np.sum(dY * self.X_norm, axis=0, keepdims=True)
-        dbeta = np.sum(dY, axis=0, keepdims=True)
-        
-        # Compute gradient with respect to input
-        dX_norm = dY * self.gamma
-        dvar = np.sum(dX_norm * (self.X - self.batch_mean) * -0.5 * np.power(self.batch_var + self.epsilon, -1.5), axis=0, keepdims=True)
-        dmean = np.sum(dX_norm * -1 / np.sqrt(self.batch_var + self.epsilon), axis=0, keepdims=True) + dvar * np.mean(-2 * (self.X - self.batch_mean), axis=0, keepdims=True)
-        dX = dX_norm / np.sqrt(self.batch_var + self.epsilon) + dvar * 2 * (self.X - self.batch_mean) / m + dmean / m
-        
-        # Update parameters
-        self.gamma -= learning_rate * dgamma
-        self.beta -= learning_rate * dbeta
-        
-        return dX
-
 # Step 6: Define the neural network model
 class SimpleNN:
     """
@@ -663,7 +556,7 @@ def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
         
         # Parameters for second signal (offset in frequency)
         Omega2 = Omega1  # Same amplitude
-        delta2 = delta1 + 0.05  # Offset frequency by 0.05
+        delta2 = delta1 + 0.5  # Offset frequency by 0.5
         phi2 = phi1  # Same phase
         
         # Generate clean signals
@@ -671,7 +564,7 @@ def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
         signal2 = probability_signal(t, Omega2, tau, delta2, phi2)
         
         # Mix the signals (simple addition)
-        mixed_signal = (signal1 + signal2) / 2.0
+        mixed_signal = (signal1 + signal2)
         
         # Add Gaussian noise
         noise = np.random.normal(0, noise_level, size=mixed_signal.shape)
@@ -705,92 +598,50 @@ def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
 
     return np.array(X_all), np.array(y_all)
 
-# Step 8: Define data augmentation function
-
-def augment_data(X, y, augmentation_factor=2):
-    """
-    Augment the dataset by adding noise to existing samples
-    
-    Parameters:
-    - X: Original input data
-    - y: Original output data
-    - augmentation_factor: Factor by which to increase the dataset size
-    
-    Returns:
-    - Augmented X and y
-    """
-    n_samples = X.shape[0]
-    X_aug = []
-    y_aug = []
-    
-    for i in range(n_samples):
-        # Add original sample
-        X_aug.append(X[i])
-        y_aug.append(y[i])
-        
-        # Add augmented samples
-        for _ in range(augmentation_factor - 1):
-            # Add small random noise to the output signal
-            noise = np.random.normal(0, 0.02, size=y[i].shape)
-            X_aug.append(X[i])  # Time stays the same
-            y_aug.append(y[i] + noise)  # Add noise to the signal
-    
-    return np.array(X_aug), np.array(y_aug)
-
 # --- MAIN EXECUTION ---
 print("\n" + "="*50)
-print("CNN IMPLEMENTATION WITH DATA AUGMENTATION")
+print("CNN IMPLEMENTATION WITHOUT STANDARDIZATION AND BATCH NORMALIZATION")
 print("="*50 + "\n")
 
 # Initialize timing dictionary
 timing = {}
 
-# Step 9: Generate and prepare the dataset
+# Step 8: Generate and prepare the dataset
 print("Generating dataset...")
 start_time = time.time()
+# Generate samples directly without augmentation
 X, y = generate_dataset(n_samples)
 timing['data_generation'] = time.time() - start_time
+print(f"Dataset size: {X.shape[0]} samples")
 print(f"Data generation time: {timing['data_generation']:.2f} seconds")
 
-# Step 10: Augment the data
-print("Augmenting data...")
+# Step 9: Skip normalization - use raw data
+print("Skipping standardization - using raw data...")
 start_time = time.time()
-X, y = augment_data(X, y, augmentation_factor=2)
-timing['data_augmentation'] = time.time() - start_time
-print(f"Dataset size after augmentation: {X.shape[0]} samples")
-print(f"Data augmentation time: {timing['data_augmentation']:.2f} seconds")
+# Use raw data without standardization
+X_scaled = X.copy()
+y_scaled = y.copy()
+timing['data_preparation'] = time.time() - start_time
+print(f"Data preparation time: {timing['data_preparation']:.2f} seconds")
 
-# Step 11: Normalize the data and save preprocessed data
-print("Normalizing features...")
-start_time = time.time()
-# Normalize input features (time values)
-scaler_X = StandardScaler()
-X_scaled = scaler_X.fit_transform(X)
-
-# Normalize output values (signal values)
-scaler_y = StandardScaler()
-y_scaled = scaler_y.fit_transform(y)
-timing['normalization'] = time.time() - start_time
-print(f"Normalization time: {timing['normalization']:.2f} seconds")
-
-# Save preprocessed data to CSV
-preprocessed_data = []
+# Save raw data to CSV
+raw_data = []
 for i in range(X_scaled.shape[0]):
     for j in range(X_scaled.shape[1]):
-        preprocessed_data.append({
+        raw_data.append({
             'sample_id': i,
             'time_point': j,
-            'X_scaled': X_scaled[i, j],
-            'y_scaled': y_scaled[i, j]
+            'X_raw': X_scaled[i, j],
+            'y_raw': y_scaled[i, j]
         })
 
-df_preprocessed = pd.DataFrame(preprocessed_data)
+df_raw = pd.DataFrame(raw_data)
 os.makedirs('output', exist_ok=True)
-preprocessed_path = 'output/preprocessed_data.csv'
-df_preprocessed.to_csv(preprocessed_path, index=False)
-print(f"Preprocessed data saved to {preprocessed_path}")
+raw_path = 'output/raw_data_no_std_no_batch.csv'
+df_raw.to_csv(raw_path, index=False)
+print(f"Raw data saved to {raw_path}")
 
-# Step 12: Split the data into training, validation, and test sets
+# Step 10: Split the data into training, validation, and test sets
 print("Splitting data...")
 start_time = time.time()
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
@@ -798,15 +649,15 @@ X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.
 timing['data_splitting'] = time.time() - start_time
 print(f"Data splitting time: {timing['data_splitting']:.2f} seconds")
 
-# Step 13: Create and configure the CNN model
-print("Creating CNN neural network...")
+# Step 11: Create and configure the CNN model
+print("Creating CNN neural network without batch normalization...")
 start_time = time.time()
 model = SimpleNN()
 
 # First convolutional block
 model.add(Conv1D(filters=16, kernel_size=3))  # 16 filters, kernel size 3
 model.add(LeakyReLU(alpha=0.1))               # LeakyReLU activation
-model.add(BatchNormalization())               # Batch normalization
+# No batch normalization here
 
 # Second convolutional block
 model.add(Conv1D(filters=32, kernel_size=3))  # 32 filters, kernel size 3
@@ -817,7 +668,7 @@ model.add(Dropout(0.2))                       # Dropout with rate 0.2
 # First fully connected layer
 model.add(Dense(units=64))                    # 64 hidden units
 model.add(LeakyReLU(alpha=0.1))               # LeakyReLU activation
-model.add(BatchNormalization())               # Batch normalization
+# No batch normalization here
 model.add(Dropout(0.2))                       # Dropout with rate 0.2
 
 # Output layer
@@ -825,12 +676,12 @@ model.add(Dense(units=n_timesteps))           # Output size matches the number o
 timing['model_creation'] = time.time() - start_time
 print(f"Model creation time: {timing['model_creation']:.2f} seconds")
 
-# Step 14: Train the model
+# Step 12: Train the model
 print("Training model...")
 start_time = time.time()
 history = model.train(
     X_train, y_train,
-    epochs=50,                                # Number of training epochs
+    epochs=100,                                # Number of training epochs
     batch_size=128,                           # Batch size
     learning_rate=0.001,                      # Learning rate
     X_val=X_val,                              # Validation data
@@ -840,20 +691,36 @@ history = model.train(
 timing['model_training'] = time.time() - start_time
 print(f"Model training time: {timing['model_training']:.2f} seconds")
 
-# Step 15: Evaluate the model and save CNN processed data
+# Step 13: Evaluate the model and save CNN processed data
 print("Evaluating model...")
 start_time = time.time()
 y_pred = model.predict(X_test)
 
-# Inverse transform to get original scale
-y_pred_original = scaler_y.inverse_transform(y_pred)
-y_test_original = scaler_y.inverse_transform(y_test)
-
-# Calculate metrics
+# Calculate metrics (using raw values)
 test_mse = np.mean(np.sum((y_pred - y_test)**2, axis=1))
 test_mae = np.mean(np.sum(np.abs(y_pred - y_test), axis=1))
-print(f"Test MSE (scaled): {test_mse:.4f}")
-print(f"Test MAE (scaled): {test_mae:.4f}")
+
+# Calculate R-squared (coefficient of determination)
+r2 = r2_score(y_test.reshape(-1), y_pred.reshape(-1))
+
+# Calculate explained variance score
+exp_var = explained_variance_score(y_test.reshape(-1), y_pred.reshape(-1))
+
+# Calculate Mean Absolute Percentage Error (MAPE)
+# Add a small epsilon to avoid division by zero
+epsilon = 1e-10
+mape = np.mean(np.abs((y_test.reshape(-1) - y_pred.reshape(-1)) / (np.abs(y_test.reshape(-1)) + epsilon))) * 100
+
+# Calculate accuracy-like metric (percentage of predictions within a certain threshold)
+threshold = 0.1  # 10% of the true value
+within_threshold = np.mean(np.abs((y_test.reshape(-1) - y_pred.reshape(-1)) / (np.abs(y_test.reshape(-1)) + epsilon)) < threshold) * 100
+
+print(f"Test MSE (raw): {test_mse:.4f}")
+print(f"Test MAE (raw): {test_mae:.4f}")
+print(f"R-squared: {r2:.4f}")
+print(f"Explained variance: {exp_var:.4f}")
+print(f"Mean Absolute Percentage Error: {mape:.2f}%")
+print(f"Predictions within {threshold*100}% threshold: {within_threshold:.2f}%")
 timing['model_evaluation'] = time.time() - start_time
 print(f"Model evaluation time: {timing['model_evaluation']:.2f} seconds")
 
@@ -866,18 +733,16 @@ for i in range(X_test.shape[0]):
             'time_point': j,
             'X_test': X_test[i, j],
             'y_test': y_test[i, j],
-            'y_pred': y_pred[i, j],
-            'y_test_original': y_test_original[i, j],
-            'y_pred_original': y_pred_original[i, j]
+            'y_pred': y_pred[i, j]
         })
 
 df_cnn_processed = pd.DataFrame(cnn_processed_data)
 os.makedirs('output', exist_ok=True)
-cnn_processed_path = 'output/cnn_processed_data.csv'
+cnn_processed_path = 'output/cnn_processed_data_no_std_no_batch.csv'
 df_cnn_processed.to_csv(cnn_processed_path, index=False)
 print(f"CNN processed data saved to {cnn_processed_path}")
 
-# Step 16: Visualize the results
+# Step 14: Visualize the results
 plt.figure(figsize=(12, 8))
 
 # Plot training history
@@ -894,12 +759,12 @@ plt.grid()
 for i in range(3):
     plt.subplot(2, 2, i+2)
     
-    # Get original time values
-    original_time = scaler_X.inverse_transform(X_test[i].reshape(1, -1)).flatten()
+    # Use original time values
+    original_time = t
     
     # Plot the true signal and prediction
-    plt.plot(original_time, y_test_original[i], 'b-', label='True Signal')
-    plt.plot(original_time, y_pred_original[i], 'r--', label='Predicted Signal')
+    plt.plot(original_time, y_test[i], 'b-', label='True Signal')
+    plt.plot(original_time, y_pred[i], 'r--', label='Predicted Signal')
     
     plt.title(f"Sample {i+1}")
     plt.xlabel("Time")
@@ -908,14 +773,42 @@ for i in range(3):
     plt.grid()
 
 plt.tight_layout()
+plt.savefig('output/cnn_results_no_std_no_batch.png')
+print("Results visualization saved to output/cnn_results_no_std_no_batch.png")
 plt.show()
 
-# Step 17: Print model summary
-print("\nSummary of CNN Implementation:")
+# Step 15: Print model summary
+print("\nSummary of CNN Implementation (No Standardization, No Batch Normalization):")
+print("1. Data Generation:")
+print("   - Generated two signals with 0.5 frequency offset")
+print("   - Mixed signals and added noise")
+print("   - Saved raw signals to CSV")
+print("2. Data Preprocessing:")
+print("   - Used raw data without standardization")
+print("   - Saved raw data to CSV")
+print("3. CNN Architecture:")
+print("   - First Conv1D: 16 filters, kernel size 3")
+print("   - Second Conv1D: 32 filters, kernel size 3")
+print("   - MaxPooling1D with pool size 2")
+print("   - Dense layer with 64 units")
+print("   - Output layer with 20 units")
+print("4. Regularization:")
+print("   - No Batch Normalization")
+print("   - Dropout (20%)")
+print("   - L2 weight decay")
+print("5. Results:")
+print(f"   - Test MSE: {test_mse:.4f}")
+print(f"   - Test MAE: {test_mae:.4f}")
+print(f"   - R-squared: {r2:.4f}")
+print(f"   - Explained variance: {exp_var:.4f}")
+print(f"   - MAPE: {mape:.2f}%")
+print(f"   - Predictions within {threshold*100}% threshold: {within_threshold:.2f}%")
+print("   - Saved CNN processed data to CSV")
+print("\nAll data files are saved in the 'output' directory.")
+
 print("\nTiming Summary:")
 print(f"Data Generation:    {timing['data_generation']:.2f} seconds")
-print(f"Data Augmentation:  {timing['data_augmentation']:.2f} seconds")
-print(f"Normalization:      {timing['normalization']:.2f} seconds")
+print(f"Data Preparation:   {timing['data_preparation']:.2f} seconds")
 print(f"Data Splitting:     {timing['data_splitting']:.2f} seconds")
 print(f"Model Creation:     {timing['model_creation']:.2f} seconds")
 print(f"Model Training:     {timing['model_training']:.2f} seconds")
