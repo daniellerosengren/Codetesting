@@ -9,7 +9,7 @@ with convolutional layers, pooling, and fully connected layers.
 """
 
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
 import keras
@@ -23,9 +23,11 @@ import time  # Import time module for timing measurements
 
 # --- CONFIGURATION ---
 n_samples = 10000      # Number of synthetic samples 
-n_timesteps = 100      # Length of time vector
+n_timesteps = 1000      # Length of time vector
+t = np.linspace(0, 1, n_timesteps)  # Time points from 0 to 1
 tau = 0.1             # Fixed interaction time parameter
-np.random.seed(40)    # For reproducibility
+noise_level = 0.05    # Standard deviation of Gaussian noise
+np.random.seed(42)    # For reproducibility
 
 
 # --- DATA GENERATION FUNCTIONS ---
@@ -74,8 +76,7 @@ def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
         Omega1 = np.random.uniform(0.4, 0.8)
         delta1 = np.random.uniform(1.0, 5.0)
         phi1 = np.random.uniform(0, 2*np.pi)
-        t = np.linspace(0, np.random.uniform(1,5), n_timesteps)  # Time points from 0 to 1
-
+        
         # Parameters for second signal (with different amplitude and offset frequency)
         Omega2 = np.random.uniform(0.3, 0.7)  # Different amplitude
         delta2 = delta1 + np.random.uniform(0.5, 0.1)   # Offset frequency by random values
@@ -89,9 +90,8 @@ def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
         mixed_signal = (signal1 + signal2) / 2.0
         
         # Add Gaussian noise
-        noise_level = np.random.uniform(0.01, 0.05)   # Standard deviation of Gaussian noise
         noise = np.random.normal(0, noise_level, size=mixed_signal.shape)
-        noisy_signal = mixed_signal + noise
+        noisy_signal = mixed_signal #+ noise
         
         # Store time as input and signals as output
         X_all.append(t)
@@ -190,19 +190,25 @@ print(f"Data augmentation time: {timing['data_augmentation']:.2f} seconds")
 print("Normalizing features...")
 start_time = time.time()
 
-# Normalize input features (time values)
-scaler_X = MinMaxScaler()
-X_scaled = scaler_X.fit_transform(X)
+def build_time_domain_cnn(n_timesteps):
+    inp = Input(shape=(n_timesteps, 1))
 
-# Normalize output values (signal values)
-scaler_signal1 = MinMaxScaler()
-signal1_scaled = scaler_signal1.fit_transform(signal1)
+    x = Conv1D(64, kernel_size=5, padding='same', activation='relu')(inp)
+    x = Conv1D(128, kernel_size=5, padding='same', activation='relu')(x)
+    x = Conv1D(64, kernel_size=5, padding='same', activation='relu')(x)
 
-scaler_signal2 = MinMaxScaler()
-signal2_scaled = scaler_signal2.fit_transform(signal2)
+    x = Conv1D(2, kernel_size=1, padding='same')(x)  # Two outputs per timestep
+    out = x  # shape: (batch_size, timesteps, 2)
 
-scaler_mixed = MinMaxScaler()
-mixed_scaled = scaler_mixed.fit_transform(mixed)
+    model = Model(inputs=inp, outputs=out)
+    model.compile(optimizer='adam', loss='mse')
+    return model
+
+# Inputs
+X = mixed_signals[..., np.newaxis]  # shape: (n_samples, timesteps, 1)
+
+# Targets
+y = np.stack([signal1, signal2], axis=-1)  # shape: (n_samples, timesteps, 2)
 
 timing['normalization'] = time.time() - start_time
 print(f"Normalization time: {timing['normalization']:.2f} seconds")
@@ -328,7 +334,7 @@ lr_callback = keras.callbacks.LearningRateScheduler(lr_scheduler, verbose=1)
 # Compile the model with multiple loss functions, custom learning rate, and regularization
 adam = keras.optimizers.Adam(learning_rate=0.002)  # Start with slightly higher learning rate
 model.compile(
-    optimizer=adam,  # Custom learning rate for better convergence # type: ignore
+    optimizer=adam,  # Custom learning rate for better convergence  
     loss={
         'signal1_output': keras.losses.MeanSquaredError(),
         'signal2_output': keras.losses.MeanSquaredError()
@@ -391,10 +397,10 @@ y_val = {
 # Fit the model
 try:
     history = model.fit(
-        mixed_train, y_train,
+        X_train, y_train,
         epochs=100,
         batch_size=128,
-        validation_data=(mixed_val, y_val),
+        validation_data=(X_val, y_val),
         callbacks=[early_stopping, model_checkpoint, PrintTrainingProgress()],
         verbose="1"  # Use string as required by the API
     )
@@ -462,7 +468,7 @@ y_test = {
 # Evaluate the model
 try:
     # Use the current model directly to avoid type checking issues
-    test_results = model.evaluate(mixed_test, y_test, verbose='1')
+    test_results = model.evaluate(X_test, y_test, verbose='1')
     
     if isinstance(test_results, list):
         print(f"Test Loss: {test_results[0]:.4f}")
@@ -477,14 +483,7 @@ except Exception as e:
 # Make predictions
 try:
     # Use the current model directly to avoid type checking issues
-    preds = model.predict(mixed_test, verbose='1')
-    if isinstance(preds, list) and len(preds) == 2:
-        signal1_pred, signal2_pred = preds
-    elif isinstance(preds, dict):
-        signal1_pred = preds['signal1_output']
-        signal2_pred = preds['signal2_output']
-    else:
-        raise ValueError("Unexpected prediction output format.")
+    signal1_pred, signal2_pred = model.predict(X_test, verbose='1')
 except Exception as e:
     print(f"Error making predictions: {e}")
     # Create empty predictions as fallback
@@ -492,12 +491,9 @@ except Exception as e:
     signal2_pred = np.zeros_like(signal2_test)
 
 # Inverse transform to get original scale
-
-# Reconstruct original signal1
 signal1_pred_original = scaler_signal1.inverse_transform(signal1_pred)
 signal1_test_original = scaler_signal1.inverse_transform(signal1_test)
 
-# Same for signal2
 signal2_pred_original = scaler_signal2.inverse_transform(signal2_pred)
 signal2_test_original = scaler_signal2.inverse_transform(signal2_test)
 

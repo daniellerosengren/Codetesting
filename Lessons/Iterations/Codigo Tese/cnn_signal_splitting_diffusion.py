@@ -9,7 +9,7 @@ with convolutional layers, pooling, and fully connected layers.
 """
 
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MaxAbsScaler
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
 import keras
@@ -22,7 +22,7 @@ import time  # Import time module for timing measurements
 
 
 # --- CONFIGURATION ---
-n_samples = 10000      # Number of synthetic samples 
+n_samples = 20000      # Number of synthetic samples 
 n_timesteps = 100      # Length of time vector
 tau = 0.1             # Fixed interaction time parameter
 np.random.seed(40)    # For reproducibility
@@ -47,20 +47,6 @@ def probability_signal(t, Omega, tau, delta, phi):
     return 0.5 + Omega * tau * np.sin(delta * t + phi)
 
 def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
-    """
-    Generate a synthetic dataset of signals with two components:
-    1. First signal with random parameters
-    2. Second signal with frequency offset by 0.05 from the first
-    
-    Parameters:
-    - n_samples: Number of samples to generate
-    - noise_level: Standard deviation of Gaussian noise
-    - save_to_csv: Whether to save the generated data to a CSV file
-    
-    Returns:
-    - X: Time values (input)
-    - y: A tuple containing (signal1, signal2, mixed_signal)
-    """
     X_all = []  # Time values (input)
     signal1_all = []  # First component signal
     signal2_all = []  # Second component signal
@@ -71,13 +57,19 @@ def generate_dataset(n_samples, noise_level=0.05, save_to_csv=True):
     
     for i in range(n_samples):
         # Random parameters for first signal
-        Omega1 = np.random.uniform(0.4, 0.8)
+        # Amplitude from Rayleigh distribution
+        Omega1 = np.random.rayleigh(scale=1)
         delta1 = np.random.uniform(1.0, 5.0)
-        phi1 = np.random.uniform(0, 2*np.pi)
+        # Initial phase from uniform distribution
+        phi0 = np.random.uniform(0, 2 * np.pi)
+        # Phase drift (diffusion) as a random walk
         t = np.linspace(0, np.random.uniform(1,5), n_timesteps)  # Time points from 0 to 1
+        phase_drift = np.cumsum(np.random.normal(0, 0.05, size=len(t)))
+        phi1 = phi0 + phase_drift
+       
 
         # Parameters for second signal (with different amplitude and offset frequency)
-        Omega2 = np.random.uniform(0.3, 0.7)  # Different amplitude
+        Omega2 = np.random.rayleigh(scale=1)  # Different amplitude
         delta2 = delta1 + np.random.uniform(0.5, 0.1)   # Offset frequency by random values
         phi2 = phi1 + np.pi*0.3  # Phase offset
         
@@ -178,34 +170,113 @@ X, (signal1, signal2, mixed) = generate_dataset(n_samples)
 timing['data_generation'] = time.time() - start_time
 print(f"Data generation time: {timing['data_generation']:.2f} seconds")
 
+plt.figure(figsize=(18, 5))
+for i in range(3):
+    plt.subplot(1, 3, i+1)
+    plt.plot(signal1[i], label='Signal 1')
+    plt.plot(signal2[i], label='Signal 2')
+    plt.title(f"Sample {i+1}")
+    plt.xlabel("Time Step")
+    plt.ylabel("Amplitude")
+
+plt.tight_layout()
+plt.show()
+
+
 # Step 2: Augment the data
 print("Augmenting data...")
 start_time = time.time()
 X, (signal1, signal2, mixed) = augment_data(X, (signal1, signal2, mixed), augmentation_factor=2)
+
+plt.figure(figsize=(18, 5))
+for i in range(3):
+    plt.subplot(1, 3, i+1)
+    plt.plot(signal1[i], label='Signal 1')
+    plt.plot(signal2[i], label='Signal 2')
+    plt.title(f"Sample {i+1}")
+    plt.xlabel("Time Step")
+    plt.ylabel("Amplitude")
+    plt.legend()
+    plt.grid()
+plt.tight_layout()
+plt.show()
+
+# Plot the first 3 samples of the generated dataset
+plt.figure(figsize=(18, 5))
+for i in range(3):
+    plt.subplot(1, 3, i+1)
+    plt.plot(signal1[i], label='Signal 1')
+    plt.plot(signal2[i], label='Signal 2')
+    plt.plot(mixed[i], label='Mixed (Noisy) Signal', linestyle='--')
+    plt.title(f"Sample {i+1}")
+    plt.xlabel("Time Step")
+    plt.ylabel("Amplitude")
+    plt.legend()
+    plt.grid()
+plt.tight_layout()
+plt.show()
+
+
 timing['data_augmentation'] = time.time() - start_time
 print(f"Dataset size after augmentation: {X.shape[0]} samples")
 print(f"Data augmentation time: {timing['data_augmentation']:.2f} seconds")
+
+
 
 # Step 3: Normalize the data and save preprocessed data
 print("Normalizing features...")
 start_time = time.time()
 
-# Normalize input features (time values)
-scaler_X = MinMaxScaler()
-X_scaled = scaler_X.fit_transform(X)
 
 # Normalize output values (signal values)
-scaler_signal1 = MinMaxScaler()
+
+scaler_X = MaxAbsScaler()
+X_scaled = scaler_X.fit_transform(X)
+
+scaler_signal1 = MaxAbsScaler()
 signal1_scaled = scaler_signal1.fit_transform(signal1)
 
-scaler_signal2 = MinMaxScaler()
+scaler_signal2 = MaxAbsScaler()
 signal2_scaled = scaler_signal2.fit_transform(signal2)
 
-scaler_mixed = MinMaxScaler()
+scaler_mixed = MaxAbsScaler()
 mixed_scaled = scaler_mixed.fit_transform(mixed)
 
 timing['normalization'] = time.time() - start_time
 print(f"Normalization time: {timing['normalization']:.2f} seconds")
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import matplotlib.colorbar as mcolorbar
+import matplotlib.colors as mcolors
+
+def plot_pretty_spread(time, signal, time_scaled, signal_scaled, sample_idx=0):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    cmap = plt.get_cmap("viridis")
+
+    # --- Before scaling ---
+    sc0 = axes[0].scatter(time, signal, c=signal, cmap=cmap, alpha=0.7)
+    axes[0].set_title("Mixed Signal vs Time (Raw)")
+    axes[0].set_xlabel("Time")
+    axes[0].set_ylabel("Amplitude")
+    axes[0].grid()
+
+    # --- After scaling ---
+    sc1 = axes[1].scatter(time_scaled, signal_scaled, c=signal_scaled, cmap=cmap, alpha=0.7)
+    axes[1].set_title("Mixed Signal vs Time (Scaled)")
+    axes[1].set_xlabel("Scaled Time")
+    axes[1].set_ylabel("Scaled Amplitude")
+    axes[1].grid()
+
+    plt.tight_layout()
+    plt.show()
+
+# Plot for the first sample
+plot_pretty_spread(
+    X[0], mixed[0],
+    X_scaled[0], mixed_scaled[0],
+    sample_idx=0
+)
 
 # Save preprocessed data to CSV
 preprocessed_data = []
@@ -269,7 +340,7 @@ x = keras.layers.BatchNormalization()(x)
 
 x = keras.layers.Conv1D(filters=64, kernel_size=5, padding='same')(x)
 x = keras.layers.LeakyReLU(alpha=0.1)(x)
-x = keras.layers.MaxPooling1D(pool_size=2)(x)
+x = keras.layers.AveragePooling1D(pool_size=2)(x)
 x = keras.layers.Dropout(0.2)(x)
 
 # Example: Add another Conv1D layer to increase complexity
@@ -349,7 +420,7 @@ print(f"Model creation time: {timing['model_creation']:.2f} seconds")
 # Early stopping to prevent overfitting
 early_stopping = keras.callbacks.EarlyStopping(
     monitor='val_loss',
-    patience=30,
+    patience=50,
     restore_best_weights=True,
     verbose=1
 )
@@ -626,6 +697,7 @@ print(f"Model Creation:     {timing['model_creation']:.2f} seconds")
 print(f"Model Training:     {timing['model_training']:.2f} seconds")
 print(f"Model Evaluation:   {timing['model_evaluation']:.2f} seconds")
 print(f"Total Time:         {sum(timing.values()):.2f} seconds")
+print(f"Absolute Error (Signal1): {signal1_mae:.4f}, (Signal2): {signal2_mae:.4f}")
 
 # Compare with the original implementation
 print("\nKey Differences from Original Implementation:")
