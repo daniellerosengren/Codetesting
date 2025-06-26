@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 import tensorflow as tf
 import keras
 from keras import layers
-
+import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 import os
@@ -340,7 +340,7 @@ x = keras.layers.BatchNormalization()(x)
 
 x = keras.layers.Conv1D(filters=64, kernel_size=5, padding='same')(x)
 x = keras.layers.LeakyReLU(alpha=0.1)(x)
-x = keras.layers.AveragePooling1D(pool_size=2)(x)
+x = keras.layers.AveragePooling1D(pool_size=2)(x) 
 x = keras.layers.Dropout(0.2)(x)
 
 # Example: Add another Conv1D layer to increase complexity
@@ -352,14 +352,20 @@ x = keras.layers.BatchNormalization()(x)
 x = keras.layers.Conv1D(filters=256, kernel_size=3, padding='same')(x)
 x = keras.layers.LeakyReLU(alpha=0.1)(x)
 x = keras.layers.BatchNormalization()(x)
+#x = keras.layers.AveragePooling1D(pool_size=2)(x)  # Add pooling here
+#x = keras.layers.Dropout(0.2)(x) 
 
 # Example: Add another Conv1D layer to increase complexity
-x = keras.layers.Conv1D(filters=516, kernel_size=3, padding='same')(x)
+x = keras.layers.Conv1D(filters=512, kernel_size=3, padding='same')(x)
 x = keras.layers.LeakyReLU(alpha=0.1)(x)
 x = keras.layers.BatchNormalization()(x)
 
 # Flatten the features
 x = keras.layers.Flatten()(x)
+
+# Global average pooling
+#x = keras.layers.GlobalAveragePooling1D()(x)  # Now shape is (batch, channels)
+
 
 # Dense layer for shared features
 shared_features = keras.layers.Dense(64)(x)
@@ -420,7 +426,7 @@ print(f"Model creation time: {timing['model_creation']:.2f} seconds")
 # Early stopping to prevent overfitting
 early_stopping = keras.callbacks.EarlyStopping(
     monitor='val_loss',
-    patience=50,
+    patience=30,
     restore_best_weights=True,
     verbose=1
 )
@@ -684,6 +690,51 @@ plt.tight_layout()
 os.makedirs('output', exist_ok=True)
 plt.savefig('output/cnn_signal_splitting_results.png')
 print("Results visualization saved to output/cnn_signal_splitting_results.png")
+plt.show()
+
+# Compute the average value for each sample
+avg_true1 = np.mean(signal1_test_original, axis=1)
+avg_pred1 = np.mean(signal1_pred_original, axis=1)
+avg_true2 = np.mean(signal2_test_original, axis=1)
+avg_pred2 = np.mean(signal2_pred_original, axis=1)
+
+plt.figure(figsize=(10, 6))
+plt.hist(avg_true1, bins=100, alpha=0.5, label='Original Signal 1', color='blue')
+plt.hist(avg_pred1, bins=100, alpha=0.5, label='Predicted Signal 1', color='orange')
+plt.hist(avg_true2, bins=100, alpha=0.5, label='Original Signal 2', color='green')
+plt.hist(avg_pred2, bins=100, alpha=0.5, label='Predicted Signal 2', color='red')
+plt.title('Histogram of Average Signal Values (per sample)')
+plt.xlabel('Average Value')
+plt.ylabel('Frequency')
+plt.legend()
+plt.grid()
+plt.tight_layout()
+plt.savefig('output/cnn_histograms.png')
+print("Results visualization saved to output/cnn_histogram.png")
+plt.show()
+
+# Compute the average value for each sample
+avg_true1 = np.mean(signal1_test_original, axis=1)
+avg_pred1 = np.mean(signal1_pred_original, axis=1)
+avg_true2 = np.mean(signal2_test_original, axis=1)
+avg_pred2 = np.mean(signal2_pred_original, axis=1)
+
+plt.figure(figsize=(8, 6))
+
+# Plot histograms with KDE (wave-like density)
+sns.histplot(avg_true1, color='blue', kde=True, stat="density", label='Original Signal 1', alpha=0.3)
+sns.histplot(avg_pred1, color='orange', kde=True, stat="density", label='Predicted Signal 1', alpha=0.3)
+sns.histplot(avg_true2, color='green', kde=True, stat="density", label='Original Signal 2', alpha=0.3)
+sns.histplot(avg_pred2, color='red', kde=True, stat="density", label='Predicted Signal 2', alpha=0.3)
+
+plt.title('Distribution of Average Signal Values (per sample)')
+plt.xlabel('Average Value')
+plt.ylabel('Density')
+plt.legend()
+plt.grid()
+plt.tight_layout()
+plt.savefig('output/cnn_waveform.png')
+print("Results visualization saved to output/cnn_waveform.png")
 plt.show()
 
 # Step 11: Print model summary
